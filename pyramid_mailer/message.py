@@ -40,6 +40,7 @@ import string
 
 from email.mime.nonmultipart import MIMENonMultipart
 from email.mime.multipart import MIMEMultipart
+from email._policybase import Compat32
 
 from email.encoders import _bencode
 
@@ -48,11 +49,7 @@ from .exceptions import (
     InvalidMessage,
     )
 
-from ._compat import (
-    text_type,
-    PY2,
-    _qencode,
-    )
+from ._compat import _qencode
 
 
 class Attachment(object):
@@ -462,21 +459,18 @@ def to_message(base):
         out = MIMENonMultipart(maintype, subtype, **ctparams)
         if ctenc:
             out['Content-Transfer-Encoding'] = ctenc
-        if isinstance(body, text_type):
+        if isinstance(body, str):
             if not charset:
                 if is_text:
                     charset, _ = best_charset(body)
                 else:
                     charset = 'utf-8'
-            if PY2:
-                body = body.encode(charset)
-            else:
-                body = body.encode(charset, 'surrogateescape')
+            body = body.encode(charset, 'surrogateescape')
         if body is not None:
             if ctenc:
                 body = transfer_encode(ctenc, body)
-            if not PY2:
-                body = body.decode(charset or 'ascii', 'replace')
+
+            body = body.decode(charset or 'ascii', 'replace')
         out.set_payload(body, charset)
 
     for k in base.keys(): # returned sorted
@@ -494,6 +488,15 @@ def to_message(base):
     for part in base.parts:
         sub = to_message(part)
         out.attach(sub)
+        
+    # Message.policy tells how we format out raw ASCII email
+    # Lone \n is not allowed in email message, but
+    # Python generates this by default.
+    # Sparkpost SMTP would reject us as
+    # smtplib.SMTPDataError:
+    # (550, b'5.6.0 Lone CR or LF in headers (see RFC2822 section 2.2)')
+    policy = Compat32(linesep="\r\n")
+    out.policy = policy        
 
     return out
 
@@ -509,7 +512,7 @@ def transfer_encode(encoding, payload):
         return _qencode(payload)
     elif encoding == '7bit':
         try:
-            text_type(payload, 'ascii')
+            str(payload, 'ascii')
         except UnicodeDecodeError:
             raise RuntimeError('Payload contains an octet that is not 7bit safe')
         return payload
