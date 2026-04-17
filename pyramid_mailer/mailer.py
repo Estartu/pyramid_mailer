@@ -191,8 +191,8 @@ class SMTP_SSLMailer(SMTPMailer):
         connection = self.smtp(
             self.hostname,
             str(self.port),
-            keyfile=self.keyfile,
-            certfile=self.certfile
+            # keyfile=self.keyfile,
+            # certfile=self.certfile
             )
         connection.set_debuglevel(self.debug_smtp)
         return connection
